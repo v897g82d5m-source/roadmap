@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RA Digital Roadmap</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-msal-browser/2.42.0/msal-browser.min.js"></script>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+    <style>
+        :root {
+            --bg-primary: #f5f7fa;
+            --bg-secondary: #ffffff;
+            --text-primary: #1a202c;
+            --text-secondary: #4a5568;
+            --border: #e2e8f0;
+            --status-not-started: #cbd5e0;
+            --status-on-track: #10b981;
+            --status-off-track: #ef4444;
+            --status-completed: #1e3a8a;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            background-color: var(--bg-primary);
+            color: var(--text-primary);
+            font-family: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            font-size: 13px;
+            padding: 32px;
+        }
+
+        .container { max-width: 1800px; margin: 0 auto; }
+
+        .header {
+            margin-bottom: 32px;
+        }
+
+        .header h1 {
+            font-size: 26px;
+            font-weight: 600;
+            margin-bottom: 6px;
+        }
+
+        .header p {
+            color: var(--text-secondary);
+            font-size: 14px;
+        }
+
+        .auth-section {
+            background-color: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 32px;
+            margin-bottom: 32px;
+            text-align: center;
+        }
+
+        .auth-section button {
+            background-color: #0078d4;
+            color: white;
+            border: none;
+            padding: 12px 28px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+        }
+
+        .auth-section button:hover {
+            background-color: #106ebe;
+        }
+
+        .user-info {
+            color: var(--text-secondary);
+            margin-bottom: 16px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .logout-btn {
+            background-color: #ef4444 !important;
+            padding: 6px 12px !important;
+            font-size: 12px !important;
+        }
+
+        .logout-btn:hover {
+            background-color: #dc2626 !important;
+        }
+
+        .roadmap-wrapper {
+            background-color: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            overflow: hidden;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+        }
+
+        .roadmap {
+            display: flex;
+            overflow-x: auto;
+        }
+
+        .roadmap-sidebar {
+            flex-shrink: 0;
+            width: 200px;
+            border-right: 1px solid var(--border);
+        }
+
+        .roadmap-content {
+            flex: 1;
+            min-width: 800px;
+        }
+
+        .quarter-headers {
+            display: flex;
+            border-bottom: 1px solid var(--border);
+            background-color: var(--bg-primary);
+        }
+
+        .quarter-header {
+            flex: 1;
+            min-width: 70px;
+            padding: 10px 6px;
+            text-align: center;
+            font-size: 11px;
+            font-weight: 500;
+            color: var(--text-secondary);
+            border-right: 1px solid var(--border);
+        }
+
+        .swimlane-label {
+            flex-shrink: 0;
+            width: 200px;
+            padding: 12px 14px;
+            border-bottom: 1px solid var(--border);
+            font-size: 13px;
+            font-weight: 500;
+            background-color: var(--bg-secondary);
+        }
+
+        .swimlane-content {
+            flex: 1;
+            min-width: 800px;
+            display: flex;
+            border-bottom: 1px solid var(--border);
+            position: relative;
+            background-color: var(--bg-secondary);
+        }
+
+        .quarter-cell {
+            flex: 1;
+            min-width: 70px;
+            border-right: 1px solid var(--border);
+            position: relative;
+            padding: 6px;
+            min-height: 52px;
+        }
+
+        .project {
+            position: absolute;
+            padding: 6px 8px;
+            border-radius: 3px;
+            font-size: 11px;
+            font-weight: 500;
+            color: white;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            cursor: pointer;
+            top: 50%;
+            transform: translateY(-50%);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .project.not-started { background-color: var(--status-not-started); }
+        .project.on-track { background-color: var(--status-on-track); }
+        .project.off-track { background-color: var(--status-off-track); }
+        .project.completed { background-color: var(--status-completed); }
+
+        .loading, .error {
+            padding: 32px;
+            text-align: center;
+        }
+
+        .error {
+            background-color: #fee;
+            color: #c33;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container" id="app"></div>
+
+    <script>
+        const msalConfig = {
+            auth: {
+                clientId: "4a1aa1d0-e3a8-4fc0-8908-2c3f6c8d8e8f",
+                authority: "https://login.microsoftonline.com/common",
+                redirectUri: window.location.origin + window.location.pathname
+            },
+            cache: {
+                cacheLocation: "localStorage",
+                storeAuthStateInCookie: false
+            }
+        };
+
+        const loginRequest = {
+            scopes: ["Sites.Read.All", "Lists.ReadWrite.All"]
+        };
+
+        let msalInstance = null;
+
+        async function initMsal() {
+            msalInstance = new msal.PublicClientApplication(msalConfig);
+            await msalInstance.initialize();
+        }
+
+        async function login() {
+            try {
+                await msalInstance.loginPopup(loginRequest);
+                await loadData();
+            } catch (error) {
+                console.error('Login failed:', error);
+                document.getElementById('app').innerHTML = `<div class="error">Login mislukt: ${error.message}</div>`;
+            }
+        }
+
+        function logout() {
+            msalInstance.logoutPopup();
+        }
+
+        async function getAccessToken() {
+            try {
+                const response = await msalInstance.acquireTokenSilent({
+                    ...loginRequest,
+                    account: msalInstance.getAllAccounts()[0]
+                });
+                return response.accessToken;
+            } catch (error) {
+                console.error('Token acquisition failed:', error);
+                return null;
+            }
+        }
+
+        async function getSharePointData() {
+            const token = await getAccessToken();
+            if (!token) return null;
+
+            try {
+                const response = await fetch(
+                    'https://graph.microsoft.com/v1.0/sites/root/lists/RA%20Digital%20Roadmap/items?$expand=fields',
+                    {
+                        headers: {
+                            'Authorization': `Bearer ${token}`,
+                            'Accept': 'application/json'
+                        }
+                    }
+                );
+
+                if (!response.ok) {
+                    throw new Error(`SharePoint API error: ${response.status}`);
+                }
+
+                return await response.json();
+            } catch (error) {
+                console.error('Error fetching SharePoint data:', error);
+                return null;
+            }
+        }
+
+        function parseDate(dateStr) {
+            if (!dateStr) return null;
+            try {
+                const [m, d, y] = dateStr.split('/');
+                return new Date(y, m - 1, d);
+            } catch { return null; }
+        }
+
+        function getQuarterIndex(date) {
+            if (!date) return -1;
+            const q = Math.floor(date.getMonth() / 3) + 1;
+            const y = date.getFullYear();
+            return (y - 2026) * 4 + (q - 1);
+        }
+
+        function renderRoadmap(items) {
+            const quarters = [];
+            for (let y = 2026; y <= 2029; y++) {
+                for (let q = 1; q <= 4; q++) {
+                    quarters.push(`Q${q} '${y.toString().slice(-2)}`);
+                }
+            }
+
+            // Group projects by capability
+            const capabilitiesSet = new Set();
+            const projectsByCapability = {};
+
+            (items || []).forEach(item => {
+                const fields = item.fields || {};
+                const cap = fields['Capability'] || 'Unknown';
+                if (!projectsByCapability[cap]) {
+                    projectsByCapability[cap] = [];
+                }
+                capabilitiesSet.add(cap);
+                projectsByCapability[cap].push({
+                    cap: cap,
+                    name: fields['Title'] || 'Untitled',
+                    startDate: fields['StartDate'],
+                    endDate: fields['EndDate'],
+                    status: fields['Status'] || 'Not Started',
+                    ai: fields['AIEnabled'] === true || fields['AIEnabled'] === 'true'
+                });
+            });
+
+            const capabilities = Array.from(capabilitiesSet).sort();
+
+            // Render sidebar
+            const sidebarHtml = capabilities.map(cap =>
+                `<div class="swimlane-label">${cap}</div>`
+            ).join('');
+
+            // Render swimlanes
+            const contentHtml = capabilities.map(cap => {
+                const capProjects = projectsByCapability[cap] || [];
+                const quarterCells = quarters.map((q, qIdx) => {
+                    const projectsInQ = capProjects.filter(proj => {
+                        const startIdx = getQuarterIndex(parseDate(proj.startDate));
+                        const endIdx = getQuarterIndex(parseDate(proj.endDate));
+                        return startIdx >= 0 && endIdx >= 0 && qIdx >= startIdx && qIdx <= endIdx;
+                    });
+
+                    let projectsHtml = projectsInQ.map(proj => {
+                        const startIdx = getQuarterIndex(parseDate(proj.startDate));
+                        const endIdx = getQuarterIndex(parseDate(proj.endDate));
+                        const duration = endIdx - startIdx + 1;
+                        const offset = qIdx - startIdx;
+
+                        const posLeft = offset * 70 + 4;
+                        const width = Math.max(duration * 70 - 8, 60);
+
+                        const statusClass = proj.status.includes('Not Started') ? 'not-started'
+                            : proj.status.includes('Off Track') ? 'off-track'
+                            : proj.status.includes('Completed') ? 'completed'
+                            : 'on-track';
+
+                        const aiHtml = proj.ai ? '<div style="width: 12px; height: 12px; border-radius: 2px; background-color: rgba(255,255,255,0.3); display: flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 700;">✓</div>' : '';
+
+                        return `<div class="project ${statusClass}" style="left: ${posLeft}px; width: ${width}px;" title="${proj.name}${proj.ai ? ' (AI-enabled)' : ''}">${aiHtml}<span>${proj.name}</span></div>`;
+                    }).join('');
+
+                    return `<div class="quarter-cell">${projectsHtml}</div>`;
+                }).join('');
+
+                return `<div style="display: flex;"><div class="swimlane-content">${quarterCells}</div></div>`;
+            }).join('');
+
+            const user = msalInstance.getAllAccounts()[0];
+            const userName = user ? user.name : 'User';
+
+            let html = `
+                <div class="header">
+                    <div class="user-info">
+                        <div><h1>RA Digital Roadmap</h1></div>
+                        <div>
+                            <span>${userName}</span>
+                            <button class="logout-btn" onclick="logout(); window.location.reload();">Uitloggen</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="roadmap-wrapper">
+                    <div class="roadmap">
+                        <div class="roadmap-sidebar">
+                            <div class="quarter-headers" style="width: 200px; border-right: 1px solid var(--border);"></div>
+                            <div>${sidebarHtml}</div>
+                        </div>
+                        <div class="roadmap-content">
+                            <div class="quarter-headers">
+                                ${quarters.map(q => `<div class="quarter-header">${q}</div>`).join('')}
+                            </div>
+                            <div>${contentHtml}</div>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            return html;
+        }
+
+        async function loadData() {
+            document.getElementById('app').innerHTML = '<div class="loading">Data laden van SharePoint...</div>';
+            const data = await getSharePointData();
+
+            if (data && data.value) {
+                document.getElementById('app').innerHTML = renderRoadmap(data.value);
+            } else {
+                document.getElementById('app').innerHTML = renderRoadmap([]);
+            }
+        }
+
+        async function init() {
+            await initMsal();
+
+            const accounts = msalInstance.getAllAccounts();
+            if (accounts.length > 0) {
+                await loadData();
+            } else {
+                document.getElementById('app').innerHTML = `
+                    <div class="header">
+                        <h1>RA Digital Roadmap</h1>
+                        <p>Beheer je IT capability roadmap met live SharePoint integratie</p>
+                    </div>
+                    <div class="auth-section">
+                        <h2>Welkom</h2>
+                        <p style="margin: 16px 0;">Log in met je Medtronic account om je roadmap te zien.</p>
+                        <button onclick="login()">Inloggen met Microsoft</button>
+                    </div>
+                `;
+            }
+        }
+
+        init();
+    </script>
+</body>
+</html>
